@@ -27,14 +27,12 @@ class Rura:
         for p in self.punkty[1:]:
             path.lineTo(p)
 
-        # Obudowa rury
         pen_rura = QPen(self.kolor_rury, self.grubosc, Qt.SolidLine,
                         Qt.RoundCap, Qt.RoundJoin)
         painter.setPen(pen_rura)
         painter.setBrush(Qt.NoBrush)
         painter.drawPath(path)
 
-        # Ciecz
         if self.czy_plynie:
             pen_ciecz = QPen(self.kolor_cieczy, self.grubosc - 4,
                              Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
@@ -57,6 +55,8 @@ class Zbiornik:
         self.aktualna_ilosc = 0.0
         self.poziom = 0.0
 
+        self.alarm = False
+
     def dodaj_ciecz(self, ilosc):
         wolne = self.pojemnosc - self.aktualna_ilosc
         dodano = min(ilosc, wolne)
@@ -72,12 +72,16 @@ class Zbiornik:
 
     def aktualizuj_poziom(self):
         self.poziom = self.aktualna_ilosc / self.pojemnosc
+        self.sprawdz_alarm()
 
     def czy_pusty(self):
         return self.aktualna_ilosc <= 0.1
 
     def czy_pelny(self):
         return self.aktualna_ilosc >= self.pojemnosc - 0.1
+
+    def sprawdz_alarm(self):
+        self.alarm = self.czy_pelny()
 
     def punkt_gora_srodek(self):
         return (self.x + self.width / 2, self.y)
@@ -86,34 +90,35 @@ class Zbiornik:
         return (self.x + self.width / 2, self.y + self.height)
 
     def draw(self, painter):
-        # Ciecz
         if self.poziom > 0:
-            h_cieczy = self.height * self.poziom
-            y_start = self.y + self.height - h_cieczy
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(0, 120, 255, 200))
-            painter.drawRect(
-                int(self.x + 3),
-                int(y_start),
-                int(self.width - 6),
-                int(h_cieczy - 2)
-            )
+            h = self.height * self.poziom
+            y = self.y + self.height - h
 
-        # Obrys
+            if self.alarm:
+                painter.setBrush(QColor(255, 80, 80, 220))  
+            else:
+                painter.setBrush(QColor(0, 120, 255, 200))  
+
+            painter.setPen(Qt.NoPen)
+            painter.drawRect(int(self.x + 3), int(y),
+                             int(self.width - 6), int(h - 2))
+
         pen = QPen(Qt.white, 4)
-        pen.setJoinStyle(Qt.MiterJoin)
         painter.setPen(pen)
         painter.setBrush(Qt.NoBrush)
-        painter.drawRect(
-            int(self.x),
-            int(self.y),
-            int(self.width),
-            int(self.height)
-        )
+        painter.drawRect(int(self.x), int(self.y),
+                          int(self.width), int(self.height))
 
-        # Nazwa
         painter.setPen(Qt.white)
         painter.drawText(int(self.x), int(self.y - 10), self.nazwa)
+
+        if self.alarm:
+            painter.setPen(QColor(255, 80, 80))
+            painter.drawText(
+                int(self.x),
+                int(self.y + self.height + 20),
+                "PEŁNE"
+            )
 
 
 # =========================
@@ -122,12 +127,10 @@ class Zbiornik:
 class SymulacjaKaskady(QWidget):
     def __init__(self):
         super().__init__()
-
         self.setWindowTitle("Symulacja kaskadowa – 4 zbiorniki")
-        self.setFixedSize(1000, 650)
+        self.setFixedSize(1000, 700)
         self.setStyleSheet("background-color: #222;")
 
-        # Zbiorniki
         self.z1 = Zbiornik(50, 50, nazwa="Zbiornik 1")
         self.z1.aktualna_ilosc = 100.0
         self.z1.aktualizuj_poziom()
@@ -138,41 +141,57 @@ class SymulacjaKaskady(QWidget):
 
         self.zbiorniki = [self.z1, self.z2, self.z3, self.z4]
 
-        # Rury
         self.rury = []
         self._stworz_rury()
 
-        # Timer
         self.timer = QTimer()
         self.timer.timeout.connect(self.logika_przeplywu)
-
-        self.btn = QPushButton("Start / Stop", self)
-        self.btn.setGeometry(50, 600, 120, 30)
-        self.btn.setStyleSheet("background-color: #444; color: white;")
-        self.btn.clicked.connect(self.przelacz_symulacje)
 
         self.running = False
         self.flow_speed = 0.8
 
+        self._stworz_przyciski()
+
     def _stworz_rury(self):
-        pary = [
-            (self.z1, self.z2),
-            (self.z2, self.z3),
-            (self.z3, self.z4)
-        ]
+        for a, b in zip(self.zbiorniki[:-1], self.zbiorniki[1:]):
+            ps = a.punkt_dol_srodek()
+            pk = b.punkt_gora_srodek()
+            mid = (ps[1] + pk[1]) / 2
 
-        for z_a, z_b in pary:
-            p_start = z_a.punkt_dol_srodek()
-            p_end = z_b.punkt_gora_srodek()
-            mid_y = (p_start[1] + p_end[1]) / 2
+            self.rury.append(Rura([
+                ps, (ps[0], mid), (pk[0], mid), pk
+            ]))
 
-            rura = Rura([
-                p_start,
-                (p_start[0], mid_y),
-                (p_end[0], mid_y),
-                p_end
-            ])
-            self.rury.append(rura)
+    def _stworz_przyciski(self):
+        y = 660
+        x = 50
+
+        self.btn_start = QPushButton("Start / Stop", self)
+        self.btn_start.setGeometry(x, y, 120, 30)
+        self.btn_start.clicked.connect(self.przelacz_symulacje)
+
+        x += 150
+        for i, z in enumerate(self.zbiorniki, start=1):
+            b_plus = QPushButton(f"Z{i} +", self)
+            b_minus = QPushButton(f"Z{i} -", self)
+
+            b_plus.setGeometry(x, y, 60, 30)
+            b_minus.setGeometry(x + 65, y, 60, 30)
+
+            b_plus.clicked.connect(lambda _, zb=z: self.napelnij(zb))
+            b_minus.clicked.connect(lambda _, zb=z: self.oproznij(zb))
+
+            x += 140
+
+    def napelnij(self, zb):
+        zb.aktualna_ilosc = zb.pojemnosc
+        zb.aktualizuj_poziom()
+        self.update()
+
+    def oproznij(self, zb):
+        zb.aktualna_ilosc = 0.0
+        zb.aktualizuj_poziom()
+        self.update()
 
     def przelacz_symulacje(self):
         if self.running:
@@ -183,24 +202,23 @@ class SymulacjaKaskady(QWidget):
 
     def logika_przeplywu(self):
         for i in range(len(self.zbiorniki) - 1):
-            z_gora = self.zbiorniki[i]
-            z_dol = self.zbiorniki[i + 1]
-            rura = self.rury[i]
+            z_g = self.zbiorniki[i]
+            z_d = self.zbiorniki[i + 1]
+            r = self.rury[i]
 
             plynie = False
-            if not z_gora.czy_pusty() and not z_dol.czy_pelny():
-                ilosc = z_gora.usun_ciecz(self.flow_speed)
-                z_dol.dodaj_ciecz(ilosc)
+            if not z_g.czy_pusty() and not z_d.czy_pelny():
+                il = z_g.usun_ciecz(self.flow_speed)
+                z_d.dodaj_ciecz(il)
                 plynie = True
 
-            rura.ustaw_przeplyw(plynie)
+            r.ustaw_przeplyw(plynie)
 
         self.update()
 
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-
         for r in self.rury:
             r.draw(p)
         for z in self.zbiorniki:
