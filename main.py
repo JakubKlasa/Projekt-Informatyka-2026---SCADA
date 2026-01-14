@@ -127,15 +127,19 @@ class Zbiornik:
 class SymulacjaKaskady(QWidget):
     def __init__(self):
         super().__init__()
+
+        self.zawor_z3 = True
+        self.zawor_z4 = True
+
         self.setWindowTitle("Symulacja kaskadowa – 4 zbiorniki")
         self.setFixedSize(1000, 700)
         self.setStyleSheet("background-color: #222;")
 
-        self.z1 = Zbiornik(450, 30, nazwa="Zbiornik 1")
+        self.z1 = Zbiornik(200, 30, nazwa="Zbiornik 1")
         self.z1.aktualna_ilosc = 100.0
         self.z1.aktualizuj_poziom()
 
-        self.z2 = Zbiornik(450, 220, nazwa="Zbiornik 2")
+        self.z2 = Zbiornik(450, 180, nazwa="Zbiornik 2")
         self.z3 = Zbiornik(200, 400, nazwa="Zbiornik 3")
         self.z4 = Zbiornik(700, 400, nazwa="Zbiornik 4")
 
@@ -206,11 +210,20 @@ class SymulacjaKaskady(QWidget):
 
             x += 140
 
+        self.btn_z3 = QPushButton("Z2 → Z3: ON", self)
+        self.btn_z3.setGeometry(50, 620, 140, 30)
+        self.btn_z3.setStyleSheet("color: white;")
+        self.btn_z3.clicked.connect(self.przelacz_zawor_z3)
+
+        self.btn_z4 = QPushButton("Z2 → Z4: ON", self)
+        self.btn_z4.setGeometry(200, 620, 140, 30)
+        self.btn_z4.setStyleSheet("color: white;")
+        self.btn_z4.clicked.connect(self.przelacz_zawor_z4)
+
     def _dodaj_kontrole_przeplywu(self):
         x = 50
         y = 560
-
-        for i in range(2):  
+        for i in range(2):
             lbl = QLabel(f"Przepływ Z{i+1}", self)
             lbl.setStyleSheet("color: white;")
             lbl.setGeometry(x, y, 120, 20)
@@ -223,6 +236,14 @@ class SymulacjaKaskady(QWidget):
                 lambda v, idx=i: self.ustaw_przeplyw(idx, v)
             )
             y += 30
+
+    def przelacz_zawor_z3(self):
+        self.zawor_z3 = not self.zawor_z3
+        self.btn_z3.setText(f"Z2 → Z3: {'ON' if self.zawor_z3 else 'OFF'}")
+
+    def przelacz_zawor_z4(self):
+        self.zawor_z4 = not self.zawor_z4
+        self.btn_z4.setText(f"Z2 → Z4: {'ON' if self.zawor_z4 else 'OFF'}")
 
     def ustaw_przeplyw(self, idx, value):
         self.flow_multipliers[idx] = value / 100.0
@@ -255,13 +276,13 @@ class SymulacjaKaskady(QWidget):
         if not self.z2.czy_pusty():
             il = self.flow_speed * self.flow_multipliers[1] / 2
 
-            if not self.z3.czy_pelny():
+            if self.zawor_z3 and not self.z3.czy_pelny():
                 self.z3.dodaj_ciecz(self.z2.usun_ciecz(il))
                 self.rury[1].ustaw_przeplyw(True)
             else:
                 self.rury[1].ustaw_przeplyw(False)
 
-            if not self.z4.czy_pelny():
+            if self.zawor_z4 and not self.z4.czy_pelny():
                 self.z4.dodaj_ciecz(self.z2.usun_ciecz(il))
                 self.rura_z2_z4.ustaw_przeplyw(True)
             else:
