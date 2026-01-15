@@ -2,7 +2,8 @@ import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QSlider, QLabel
 from PyQt5.QtCore import Qt, QTimer, QPointF
 from PyQt5.QtGui import QPainter, QColor, QPen, QPainterPath
-
+from PyQt5 import QtWidgets, QtCore
+import pyqtgraph as pg
 
 # =========================
 # Klasa Rura
@@ -160,6 +161,9 @@ class SymulacjaKaskady(QWidget):
         self.flow_multipliers = [1.0, 1.0, 1.0]
         self._dodaj_kontrole_przeplywu()
 
+        self.wykres = CisnieniePlot()
+        self.wykres.show()
+
     def _stworz_rury(self):
         for a, b in zip(self.zbiorniki[:2], self.zbiorniki[1:3]):
             ps = a.punkt_dol_srodek()
@@ -288,6 +292,11 @@ class SymulacjaKaskady(QWidget):
             else:
                 self.rura_z2_z4.ustaw_przeplyw(False)
 
+        p1 = self.flow_speed * self.flow_multipliers[0] if self.rury[0].czy_plynie else 0
+        p2 = self.flow_speed * self.flow_multipliers[1] if self.rury[1].czy_plynie else 0
+        p3 = self.flow_speed * self.flow_multipliers[1] if self.rura_z2_z4.czy_plynie else 0
+        self.wykres.set_values(p1, p2, p3)
+
         self.update()
 
     def paintEvent(self, event):
@@ -298,6 +307,52 @@ class SymulacjaKaskady(QWidget):
         self.rura_z2_z4.draw(p)
         for z in self.zbiorniki:
             z.draw(p)
+
+
+class CisnieniePlot(QtWidgets.QMainWindow):
+    def __init__(self):
+        super().__init__()
+
+        self.graphWidget = pg.PlotWidget()
+        self.setCentralWidget(self.graphWidget)
+
+        self.graphWidget.setTitle("Ciśnienie w rurach")
+        self.graphWidget.setLabel('left', 'Ciśnienie')
+        self.graphWidget.setLabel('bottom', 'Czas')
+        self.graphWidget.showGrid(x=True, y=True)
+        self.graphWidget.addLegend()
+
+        self.range = 200
+        self.x = list(range(self.range))
+
+        self.y1 = [0] * self.range
+        self.y2 = [0] * self.range
+        self.y3 = [0] * self.range
+
+        self.l1 = self.graphWidget.plot(self.x, self.y1, pen='r', name="Z1 → Z2")
+        self.l2 = self.graphWidget.plot(self.x, self.y2, pen='g', name="Z2 → Z3")
+        self.l3 = self.graphWidget.plot(self.x, self.y3, pen='b', name="Z2 → Z4")
+
+        self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(self.update_plot)
+        self.timer.start(20)
+
+        self.p1 = self.p2 = self.p3 = 0
+
+    def set_values(self, p1, p2, p3):
+        self.p1 = p1
+        self.p2 = p2
+        self.p3 = p3
+
+    def update_plot(self):
+        self.y1 = self.y1[1:] + [self.p1]
+        self.y2 = self.y2[1:] + [self.p2 + 20]
+        self.y3 = self.y3[1:] + [self.p3 + 40]
+
+        self.l1.setData(self.x, self.y1)
+        self.l2.setData(self.x, self.y2)
+        self.l3.setData(self.x, self.y3)
+
 
 
 # =========================
